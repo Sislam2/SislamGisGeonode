@@ -21,13 +21,10 @@
 # Do not remove handler500 import. It is required to re-export
 # the custom error page handler for the GeoNode project
 # related issue: https://github.com/GeoNode/geonode-project/issues/570
+from django.urls import include, path
+
 from geonode.urls import urlpatterns, handler500  # noqa
 
-"""
-# You can register your own urlpatterns here
 urlpatterns = [
-    url(r'^/?$',
-        homepage,
-        name='home'),
- ] + urlpatterns
-"""
+    path("", include("geonode_project.sislam_sso.urls")),
+] + urlpatterns
