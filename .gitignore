@@ -52,6 +52,9 @@ coverage.xml
 celerybeat-schedule
 celerybeat-schedule.*
 
+# Sislam: bind mount de estáticos/mídia/estado gerado pelos containers (docker-compose.yml)
+/data/
+
 # Sphinx documentation
 docs/_build/
 
