@@ -1,0 +1,17 @@
+# Só desenvolvimento: <tenant>.sislam.localhost e <tenant>.msmeioambiente.localhost -> Rails local (rails s em localhost:3000).
+# Reproduz os dois domínios-base da produção com https, para testar o iframe do GeoNode em cada um.
+server {
+    listen      443 ssl;
+    server_name ~^[a-z0-9_-]+\.(sislam|msmeioambiente)\.localhost$;
+
+    ssl_certificate     ${SISLAM_GIS_CERT_DIR}/fullchain.pem;
+    ssl_certificate_key ${SISLAM_GIS_CERT_DIR}/privkey.pem;
+
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}

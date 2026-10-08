@@ -58,6 +58,9 @@ INSTALLED_APPS += (
     "geonode_project.sislam_tenant",
 )
 
+# Primeiro da lista: na resposta roda por último, depois que sessão e CSRF gravaram os cookies
+MIDDLEWARE = ("geonode_project.sislam_sso.middleware.PartitionedCookiesMiddleware",) + tuple(MIDDLEWARE)
+
 # Location of url mappings
 ROOT_URLCONF = os.getenv("ROOT_URLCONF", "{}.urls".format(PROJECT_NAME))
 
