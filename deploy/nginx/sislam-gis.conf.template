@@ -20,6 +20,7 @@ map $uri $sislam_gis_frame_ancestors {
     default                 "'self'";
     ~^/maps/[^/]+/embed$    "'self' ${SISLAM_GIS_FRAME_ANCESTORS}";
     /sso/sislam-login/      "'self' ${SISLAM_GIS_FRAME_ANCESTORS}";
+    ~^/sislam/transparencia/[a-z0-9_]+/$  "'self' ${SISLAM_GIS_FRAME_ANCESTORS}";
 }
 
 server {

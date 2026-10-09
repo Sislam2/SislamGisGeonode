@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mapa da Transparência</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@10.4.0/ol.css">
+  <style>
+    html, body, #mapa { margin: 0; height: 100%; width: 100%; font-family: sans-serif; }
+    .popup { position: absolute; bottom: 12px; left: -50px; min-width: 220px; max-width: 320px; max-height: 240px;
+             overflow: auto; background: #fff; border: 1px solid #ccc; border-radius: 6px; padding: 8px 24px 8px 10px;
+             box-shadow: 0 2px 6px rgba(0, 0, 0, .25); font-size: 13px; line-height: 1.4; }
+    .popup p { margin: 0 0 6px; }
+    .popup p + p { border-top: 1px solid #eee; padding-top: 6px; }
+    .popup-fechar { position: absolute; top: 4px; right: 6px; border: 0; background: none; cursor: pointer; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <div id="mapa"></div>
+  <div id="popup" class="popup" hidden>
+    <button type="button" class="popup-fechar" aria-label="Fechar">&times;</button>
+    <div id="popup-conteudo"></div>
+  </div>
+
+  {{ camada|json_script:"camada" }}
+  {{ cql|json_script:"cql" }}
+  {{ extensao|json_script:"extensao" }}
+  {{ wms_url|json_script:"wms-url" }}
+  <script src="https://cdn.jsdelivr.net/npm/ol@10.4.0/dist/ol.js"></script>
+  <script>
+    const dado = (id) => JSON.parse(document.getElementById(id).textContent);
+
+    const wms = new ol.source.ImageWMS({
+      url: dado("wms-url"),
+      params: { LAYERS: dado("camada"), CQL_FILTER: dado("cql") },
+      ratio: 1,
+    });
+
+    const popup = document.getElementById("popup");
+    const overlay = new ol.Overlay({ element: popup, autoPan: { animation: { duration: 200 } } });
+
+    const mapa = new ol.Map({
+      target: "mapa",
+      layers: [new ol.layer.Tile({ source: new ol.source.OSM() }), new ol.layer.Image({ source: wms })],
+      overlays: [overlay],
+      view: new ol.View(),
+    });
+    mapa.getView().fit(ol.proj.transformExtent(dado("extensao"), "EPSG:4326", "EPSG:3857"), {
+      padding: [40, 40, 40, 40], maxZoom: 16,
+    });
+
+    function fecharPopup() {
+      popup.hidden = true;
+      overlay.setPosition(undefined);
+    }
+    popup.querySelector(".popup-fechar").addEventListener("click", fecharPopup);
+
+    // A descrição vem do Sislam com <br> entre as linhas e pode conter texto digitado por usuários:
+    // vira texto puro, nunca HTML.
+    function paragrafo(descricao) {
+      const p = document.createElement("p");
+      (descricao || "").split(/<br\s*\/?>/i).forEach((linha, i) => {
+        if (i > 0) p.appendChild(document.createElement("br"));
+        p.appendChild(document.createTextNode(linha.trim()));
+      });
+      return p;
+    }
+
+    mapa.on("singleclick", async (evento) => {
+      const url = wms.getFeatureInfoUrl(evento.coordinate, mapa.getView().getResolution(), "EPSG:3857", {
+        INFO_FORMAT: "application/json", FEATURE_COUNT: 10,
+      });
+      const resposta = await fetch(url);
+      const pontos = resposta.ok ? (await resposta.json()).features : [];
+      if (!pontos.length) return fecharPopup();
+
+      document.getElementById("popup-conteudo").replaceChildren(...pontos.map((f) => paragrafo(f.properties.descricao)));
+      popup.hidden = false;
+      overlay.setPosition(evento.coordinate);
+    });
+  </script>
+</body>
+</html>

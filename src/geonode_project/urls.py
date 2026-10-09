@@ -27,4 +27,5 @@ from geonode.urls import urlpatterns, handler500  # noqa
 
 urlpatterns = [
     path("", include("geonode_project.sislam_sso.urls")),
+    path("", include("geonode_project.sislam_tenant.urls")),
 ] + urlpatterns
