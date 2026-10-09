@@ -1,0 +1,160 @@
+# Vhost do nginx do servidor para o GeoNode Sislam (produção): django e geoserver rodam no
+# docker-compose.yml deste repo, publicados só em 127.0.0.1. Portado de GeoNode/geonode-docker
+# docker/nginx/geonode.conf.envsubst (master). Ver IMPLEMENTACAO_SISLAM.md.
+#
+# Template: as variáveis SISLAM_GIS_* vêm do .env. Em dev o nginx do docker-compose.dev.yml renderiza
+# sozinho; em produção, gerar o vhost uma vez a partir do .env do servidor:
+#   set -a; . <(grep '^SISLAM_GIS_' .env); set +a
+#   envsubst "$(printf '${%s} ' SISLAM_GIS_HOST SISLAM_GIS_FRAME_ANCESTORS SISLAM_GIS_CERT_DIR)" \
+#     < deploy/nginx/sislam-gis.conf.template > /etc/nginx/sites-available/sislam-gis.conf
+#
+# Fixos (iguais em dev e produção):
+#   /opt/SislamGisGeonode            -> onde o repo está clonado (bind mount ./data/statics)
+#   127.0.0.1:8010 / 127.0.0.1:8080  -> portas publicadas do django / geoserver no docker-compose.yml
+
+# Embed: o mapa canônico (e o SSO que leva até ele) pode ser aberto em iframe pelos domínios dos
+# tenants do Sislam (lib/middleware/sislam_multitenant.rb no sislam2_0). O restante do GeoNode só pode
+# ser emoldurado por ele mesmo. X-Frame-Options não aceita lista de origens, por isso o controle é
+# feito só pelo CSP frame-ancestors e o X-Frame-Options dos upstreams é removido (como no original).
+map $uri $sislam_gis_frame_ancestors {
+    default                 "'self'";
+    ~^/maps/[^/]+/embed$    "'self' ${SISLAM_GIS_FRAME_ANCESTORS}";
+    /sso/sislam-login/      "'self' ${SISLAM_GIS_FRAME_ANCESTORS}";
+}
+
+server {
+    listen      80;
+    server_name ${SISLAM_GIS_HOST};
+    return      301 https://$host$request_uri;
+}
+
+server {
+    listen      443 ssl;
+    server_name ${SISLAM_GIS_HOST};
+
+    # Mesmos nomes do Let's Encrypt: SISLAM_GIS_CERT_DIR pode ser /etc/letsencrypt/live/<domínio>
+    ssl_certificate     ${SISLAM_GIS_CERT_DIR}/fullchain.pem;
+    ssl_certificate_key ${SISLAM_GIS_CERT_DIR}/privkey.pem;
+
+    charset utf-8;
+
+    # max upload size
+    client_max_body_size 100G;
+    client_body_buffer_size 256K;
+    client_body_timeout 600s;
+    large_client_header_buffers 4 64k;
+
+    proxy_connect_timeout       600;
+    proxy_send_timeout          600;
+    proxy_read_timeout          600;
+    proxy_max_temp_file_size    10240m;
+    send_timeout                600;
+
+    etag on;
+
+    # compression
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_http_version 1.1;
+    gzip_buffers 16 8k;
+    gzip_min_length 1100;
+    gzip_comp_level 6;
+    gzip_types
+            text/css
+            text/javascript
+            text/xml
+            text/plain
+            application/xml
+            application/xml+rss
+            application/javascript
+            application/x-javascript
+            application/json;
+
+    add_header Content-Security-Policy "frame-ancestors $sislam_gis_frame_ancestors" always;
+
+    # GeoServer
+    location /geoserver {
+      proxy_pass http://127.0.0.1:8080;
+
+      proxy_set_header X-Forwarded-Host $host;
+      proxy_set_header X-Forwarded-Server $host;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_hide_header X-Frame-Options;
+      # strip basic auth headers (mainly for the /rest requests from the client)
+      proxy_hide_header WWW-Authenticate;
+
+      proxy_http_version 1.1;
+      proxy_redirect http://127.0.0.1:8080 $scheme://$host;
+      proxy_request_buffering  off;
+      client_max_body_size 0;
+    }
+
+    # GeoNode
+    location /static/ {
+      alias /opt/SislamGisGeonode/data/statics/static/;
+
+      location ~* \.(?:html|js|jpg|jpeg|gif|png|css|tgz|gz|rar|bz2|doc|pdf|ppt|tar|wav|bmp|ttf|rtf|swf|ico|flv|txt|woff|woff2|svg|xml)$ {
+          gzip_static always;
+          expires 30d;
+          access_log off;
+          add_header Pragma "public";
+          add_header Cache-Control "max-age=31536000, public";
+      }
+    }
+
+    location /uploaded/ {
+      alias /opt/SislamGisGeonode/data/statics/uploaded/;
+
+      location ~* \.(?:html|js|jpg|jpeg|gif|png|css|tgz|gz|rar|bz2|doc|pdf|ppt|tar|wav|bmp|ttf|rtf|swf|ico|flv|txt|woff|woff2|svg|xml)$ {
+          gzip_static always;
+          expires 30d;
+          access_log off;
+          add_header Pragma "public";
+          add_header Cache-Control "max-age=31536000, public";
+      }
+    }
+
+    location / {
+      if ($request_method = OPTIONS) {
+          add_header Access-Control-Allow-Methods "GET, POST, PUT, PATCH, OPTIONS";
+          add_header Access-Control-Allow-Headers "Authorization, Content-Type, Accept";
+          add_header Access-Control-Allow-Credentials true;
+          add_header Content-Length 0;
+          add_header Content-Type text/plain;
+          add_header Access-Control-Max-Age 1728000;
+          return 200;
+      }
+
+      # add_header aqui anula os do server; repete o CSP
+      add_header Content-Security-Policy "frame-ancestors $sislam_gis_frame_ancestors" always;
+      add_header Access-Control-Allow-Credentials false;
+      add_header Access-Control-Allow-Headers "Content-Type, Accept, Authorization, Origin, User-Agent";
+      add_header Access-Control-Allow-Methods "GET, POST, PUT, PATCH, OPTIONS";
+
+      proxy_redirect              off;
+      proxy_set_header            Host $host;
+      proxy_set_header            Origin $scheme://$host;
+      proxy_set_header            X-Real-IP $remote_addr;
+      proxy_set_header            X-Forwarded-Host $server_name;
+      proxy_set_header            X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header            X-Forwarded-Proto $scheme;
+      proxy_hide_header           X-Frame-Options;
+      proxy_request_buffering     off;
+
+      proxy_pass http://127.0.0.1:8010;
+
+      location ~* \.(?:js|jpg|jpeg|gif|png|tgz|gz|rar|bz2|doc|pdf|ppt|tar|wav|bmp|ttf|rtf|swf|ico|flv|woff|woff2|svg|xml)$ {
+          proxy_pass http://127.0.0.1:8010;
+          gzip_static always;
+          expires 30d;
+          access_log off;
+          add_header Pragma "public";
+          add_header Cache-Control "max-age=31536000, public";
+      }
+    }
+}

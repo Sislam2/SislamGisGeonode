@@ -1,0 +1,26 @@
+# Só desenvolvimento. Carregado via COMPOSE_FILE no .env local (ver .env.sample).
+services:
+  django:
+    volumes:
+      - './src:/usr/src/project'
+  celery:
+    volumes:
+      - './src:/usr/src/project'
+
+  # Faz o papel do nginx do servidor, com o mesmo vhost (deploy/nginx/sislam-gis.conf.template)
+  nginx:
+    image: nginx:stable-alpine
+    container_name: nginx4${COMPOSE_PROJECT_NAME}
+    network_mode: host  # mesmos upstreams da produção: 127.0.0.1:8010, :8080 e o Rails em :3000
+    restart: unless-stopped
+    environment:
+      NGINX_ENVSUBST_FILTER: "^SISLAM_GIS_"
+      SISLAM_GIS_HOST: ${SISLAM_GIS_HOST}
+      SISLAM_GIS_FRAME_ANCESTORS: ${SISLAM_GIS_FRAME_ANCESTORS}
+      SISLAM_GIS_CERT_DIR: ${SISLAM_GIS_CERT_DIR}
+    volumes:
+      - /dev/null:/etc/nginx/conf.d/default.conf:ro  # sem o site padrão da imagem (respondia no ::1:80)
+      - ./deploy/nginx/sislam-gis.conf.template:/etc/nginx/templates/sislam-gis.conf.template:ro
+      - ./deploy/nginx/dev/sislam-rails.conf.template:/etc/nginx/templates/sislam-rails.conf.template:ro
+      - ./data/certs:${SISLAM_GIS_CERT_DIR}:ro
+      - ./data/statics:/opt/SislamGisGeonode/data/statics:ro
