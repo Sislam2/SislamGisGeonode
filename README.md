@@ -1,5 +1,11 @@
 # GeoNode Project
 
+> **Sislam GIS:** este fork é a plataforma de mapas do Sislam. Comece por
+> [SISLAM_SPIKE.md](SISLAM_SPIKE.md) (avaliação, resultados e riscos) e
+> [IMPLEMENTACAO_SISLAM.md](IMPLEMENTACAO_SISLAM.md) (ambiente local, instalação no servidor e operação).
+> O restante deste README é o original do geonode-project e descreve o modelo com banco, Redis e nginx em
+> containers, que não é o usado pelo Sislam.
+
 GeoNode Django project. This can be forked to customize, add Python modules or Django apps to your GeoNode instance.
 
 > [!IMPORTANT]  
